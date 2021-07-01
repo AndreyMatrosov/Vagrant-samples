@@ -1,0 +1,40 @@
+Create a LVM volume in a Vagrant-driven VirtualBox using 75% of the space in the VG
+```
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# This is a Vagrant setup that sets up a logical volume mounted at /var/lib/mysql
+# using only 75% of the avilable space in the volume group it lives in. 
+# DEPENCIES: vagrant-persistent-storage plugin.
+
+Vagrant.configure(2) do |config|
+  config.vm.box = "opscode-ubuntu-14.04"
+
+  # Use the vagrant-persistent-storage plugin to make a disk
+  config.persistent_storage.enabled = true
+  config.persistent_storage.location = "disks/sourcehdd.vdi"
+  config.persistent_storage.size = 500
+  config.persistent_storage.mount = false
+  config.persistent_storage.use_lvm = true
+  config.persistent_storage.format = false
+  config.persistent_storage.volgroupname = 'vg1'
+
+  # Okay, the above creates vg 'vg1' with LV 'vps' and formats it as ext3, using
+  # the entire volume group.
+  # We'll need to undo some of that. Nuke that LV, make a new LV using 75% of
+  # the available space, format as ext4, and mont it at /var/lib/mysql.
+  $disk_cleanup = <<SCRIPT
+if lvs | grep vps; then
+  echo "==> SHELL PROVISIONER: Setting up logical volumes"
+  lvremove -f vg1
+  lvcreate vg1 -n mysql -l 75%FREE
+  mkfs.ext4 /dev/vg1/mysql
+  mkdir -p /var/lib/mysql
+  echo "/dev/mapper/vg1-mysql /var/lib/mysql               ext4    errors=remount-ro 0       1" >> /etc/fstab
+  mount -a
+fi
+SCRIPT
+  config.vm.provision "shell", inline: $disk_cleanup
+
+end
+```
